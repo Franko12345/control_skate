@@ -8,7 +8,8 @@
     "scheme": "reactnativetest",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.anonymous.React-native-test"
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +18,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.React_native_test"
     },
     "web": {
       "output": "static",
@@ -25,6 +27,13 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "with-rn-bluetooth-classic",
+        {
+          "peripheralUsageDescription": "Allow $(PRODUCT_NAME) to check bluetooth peripheral info",
+          "alwaysUsageDescription": "Allow $(PRODUCT_NAME) to always use bluetooth info"
+        }
+      ],
       [
         "expo-splash-screen",
         {
