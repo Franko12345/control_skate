@@ -12,10 +12,9 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import Slider from '@react-native-community/slider';
 import { useBluetooth } from '../hooks/useBluetooth';
 
-const MIN_RPM = 600;
+const MIN_RPM = 0;
 const MAX_RPM = 8000;
 
 export default function Dashboard() {
@@ -28,6 +27,7 @@ export default function Dashboard() {
     connectedDevice,
     batteryVoltage,
     actualRpm,
+    isOvercurrent,
     errorMsg,
     requestEnable,
     startScan,
@@ -37,8 +37,9 @@ export default function Dashboard() {
     setErrorMsg,
   } = useBluetooth();
 
-  const [rpm, setRpm] = useState(800); // Target RPM controlled by slider
+  const [rpm, setRpm] = useState(0); // Target RPM controlled by slider
   const [modalVisible, setModalVisible] = useState(false);
+  const [showOvercurrentModal, setShowOvercurrentModal] = useState(false);
 
   const lastSentRpm = useRef<number>(0);
   const lastSentTime = useRef<number>(0);
@@ -57,10 +58,23 @@ export default function Dashboard() {
 
   // Keep Bluetooth updated when target RPM state changes
   useEffect(() => {
-    if (connectedDevice) {
-      throttledSendRpm(rpm);
+      if (connectedDevice) {
+          throttledSendRpm(rpm);
+          if (batteryVoltage < 22) {
+              setRpm(0);
+          }
     }
   }, [rpm, connectedDevice, throttledSendRpm]);
+
+  // Zera o RPM imediatamente ao receber aviso de sobrecorrente
+  useEffect(() => {
+    if (isOvercurrent && connectedDevice) {
+      console.log('[UI] Sobrecorrente detectada! Zerando RPM alvo e exibindo popup.');
+      setRpm(0);
+      sendRpm(0);
+      setShowOvercurrentModal(true);
+    }
+  }, [isOvercurrent, connectedDevice, sendRpm]);
 
   const handleAccelerate = useCallback(() => {
     setRpm((prev) => {
@@ -108,11 +122,11 @@ export default function Dashboard() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#0F0F13" />
       <View style={styles.container}>
-        
+
         {/* Header / Navigation Bar */}
         <View style={styles.headerBar}>
           <Text style={styles.header}>Painel do Skate</Text>
-          
+
           {/* Bluetooth Status Badge */}
           <TouchableOpacity
             style={[
@@ -148,7 +162,7 @@ export default function Dashboard() {
               {connectedDevice ? actualRpm.toLocaleString('pt-BR') : '---'}
             </Text>
             <Text style={styles.metricUnit}>rpm</Text>
-            
+
             {/* Target RPM Subtext */}
             <View style={styles.targetRpmSubRow}>
               <Text style={styles.targetRpmSubLabel}>Alvo: </Text>
@@ -207,30 +221,31 @@ export default function Dashboard() {
             </Text>
           </View>
 
-          <Slider
-            style={styles.slider}
-            minimumValue={MIN_RPM}
-            maximumValue={MAX_RPM}
-            step={100}
-            value={rpm}
-            onValueChange={(v) => setRpm(Math.round(v))}
-            onSlidingComplete={(v) => {
-              const targetVal = Math.round(v);
-              if (connectedDevice) {
-                sendRpm(targetVal);
-                lastSentRpm.current = targetVal;
-                lastSentTime.current = Date.now();
-              }
-            }}
-            minimumTrackTintColor={targetRpmColor}
-            maximumTrackTintColor="#2A2A35"
-            thumbTintColor={targetRpmColor}
-          />
-
-          <View style={styles.sliderTicks}>
-            <Text style={styles.sliderTick}>600</Text>
-            <Text style={styles.sliderTick}>4.3k</Text>
-            <Text style={styles.sliderTick}>8k</Text>
+          <View style={styles.presetRow}>
+            {[
+              { label: '0%', value: 0, color: '#4A4A5A' },
+              { label: '25%', value: 25, color: '#3b82f6' },
+              { label: '50%', value: 50, color: '#10b981' },
+              { label: '75%', value: 75, color: '#f59e0b' },
+              { label: '100%', value: 100, color: '#ef4444' }
+            ].map((preset) => (
+              <TouchableOpacity
+                key={preset.label}
+                style={[styles.presetBtn, { backgroundColor: preset.color }]}
+                onPress={() => {
+                  const targetVal = Math.round(MIN_RPM + (MAX_RPM - MIN_RPM) * (preset.value / 100));
+                  setRpm(targetVal);
+                  if (connectedDevice) {
+                    sendRpm(targetVal);
+                    lastSentRpm.current = targetVal;
+                    lastSentTime.current = Date.now();
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.presetBtnText}>{preset.label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
@@ -246,15 +261,28 @@ export default function Dashboard() {
             <Text style={styles.btnSubText}>+500 rpm</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.btn, styles.btnBrake]}
-            onPress={handleBrake}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.btnIcon}>↓</Text>
-            <Text style={styles.btnText}>Frear</Text>
-            <Text style={styles.btnSubText}>-600 rpm</Text>
-          </TouchableOpacity>
+          <View style={styles.rightCol}>
+            <TouchableOpacity
+              style={[styles.btn, styles.btnBrake]}
+              onPress={handleBrake}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.btnIcon}>↓</Text>
+              <Text style={styles.btnText}>Frear</Text>
+              <Text style={styles.btnSubText}>-600 rpm</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.btn, styles.btnBrake]}
+              onPress={() => {setRpm(0)}}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.btnIcon}>▀</Text>
+              <Text style={styles.btnText}>Parar</Text>
+              <Text style={styles.btnSubText}>FULL STOP</Text>
+            </TouchableOpacity>
+          </View>
+
         </View>
 
       </View>
@@ -401,6 +429,33 @@ export default function Dashboard() {
           </View>
         </View>
       </Modal>
+      {/* Overcurrent Alert Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showOvercurrentModal}
+        onRequestClose={() => {}}
+      >
+        <View style={styles.overcurrentOverlay}>
+          <View style={styles.overcurrentContainer}>
+            <View style={styles.overcurrentHeader}>
+              <Text style={styles.overcurrentIcon}>⚠️</Text>
+              <Text style={styles.overcurrentTitle}>SOBRECORRENTE</Text>
+            </View>
+            <Text style={styles.overcurrentText}>
+              O skate reportou sobrecorrente e o motor foi parado por segurança.
+            </Text>
+            <TouchableOpacity
+              style={styles.overcurrentBtn}
+              onPress={() => setShowOvercurrentModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.overcurrentBtnText}>ENTENDI</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -541,19 +596,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  slider: {
-    width: '100%',
-    height: 44,
-  },
-  sliderTicks: {
+  presetRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: -2,
-    paddingHorizontal: 4,
+    marginTop: 12,
+    gap: 8,
   },
-  sliderTick: {
-    fontSize: 11,
-    color: '#4A4A5A',
+  presetBtn: {
+    flex: 1,
+    height: 80,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  presetBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 18,
   },
 
   /* Buttons */
@@ -562,12 +621,16 @@ const styles = StyleSheet.create({
     gap: 12,
     flex: 1,
   },
+  rightCol: {
+    flex: 1,
+    gap: 12,
+  },
   btn: {
     flex: 1,
-    borderRadius: 24,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 110,
+    minHeight: 70,
   },
   btnAccel: {
     backgroundColor: '#052E1C',
@@ -580,21 +643,21 @@ const styles = StyleSheet.create({
     borderColor: '#EF4444',
   },
   btnIcon: {
-    fontSize: 26,
+    fontSize: 18,
     color: '#FFFFFF',
-    lineHeight: 30,
-    marginBottom: 2,
+    lineHeight: 22,
+    marginBottom: 0,
   },
   btnText: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
     letterSpacing: 0.2,
   },
   btnSubText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#8888A0',
-    marginTop: 2,
+    marginTop: 0,
   },
 
   /* Modal Layout */
@@ -821,5 +884,58 @@ const styles = StyleSheet.create({
     color: '#6B6B80',
     fontSize: 13,
   },
-});
 
+  /* Overcurrent Modal Styles */
+  overcurrentOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  overcurrentContainer: {
+    backgroundColor: '#1E1E2F',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    borderWidth: 2,
+    borderColor: '#EF4444',
+    alignItems: 'center',
+  },
+  overcurrentHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  overcurrentIcon: {
+    fontSize: 48,
+    marginBottom: 8,
+  },
+  overcurrentTitle: {
+    color: '#EF4444',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  overcurrentText: {
+    color: '#E2E8F0',
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  overcurrentBtn: {
+    backgroundColor: '#EF4444',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    width: '100%',
+    alignItems: 'center',
+  },
+  overcurrentBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.5,
+  },
+});

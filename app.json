@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "React_native_test",
-    "slug": "React_native_test",
+    "name": "control_skate",
+    "slug": "control_skate",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -19,7 +19,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.React_native_test"
+      "package": "com.anonymous.control_skate"
     },
     "web": {
       "output": "static",

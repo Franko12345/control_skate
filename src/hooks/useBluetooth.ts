@@ -17,6 +17,7 @@ export function useBluetooth() {
   // Skateboard Telemetry
   const [batteryVoltage, setBatteryVoltage] = useState<number>(0);
   const [actualRpm, setActualRpm] = useState<number>(0);
+  const [isOvercurrent, setIsOvercurrent] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // References for managing subscription and reading buffers
@@ -152,11 +153,18 @@ export function useBluetooth() {
     }
   };
 
-  // Parsers for incoming telemetry data
   const parseTelemetryPacket = (line: string) => {
     const cleanLine = line.trim();
     console.log(`[BT] Tentando parse na linha limpa: "${cleanLine}"`);
     if (!cleanLine) return;
+
+    // 0. Overcurrent alert
+    if (cleanLine.toLowerCase() === 'overcurrent') {
+      console.log('[BT] SOBRECORRENTE DETECTADA! Zerando RPM.');
+      setActualRpm(0);
+      setIsOvercurrent(true);
+      return;
+    }
 
     // 1. Key-Value format (e.g. BAT:78,RPM:1250 or B:80,R:1400)
     const keyValMatch = cleanLine.match(
@@ -168,6 +176,8 @@ export function useBluetooth() {
       const rpm = parseInt(keyValMatch[2], 10);
       setBatteryVoltage(bat);
       setActualRpm(rpm);
+      // Se voltou a receber telemetria normal, a sobrecorrente passou
+      setIsOvercurrent(false);
       return;
     }
 
@@ -179,6 +189,7 @@ export function useBluetooth() {
       const rpm = parseInt(csvMatch[2], 10);
       setBatteryVoltage(bat);
       setActualRpm(rpm);
+      setIsOvercurrent(false);
       return;
     }
 
@@ -191,6 +202,7 @@ export function useBluetooth() {
         console.log(`[BT] Match JSON: BAT=${bat}, RPM=${rpm}`);
         setBatteryVoltage(parseFloat(bat));
         setActualRpm(parseInt(rpm, 10));
+        setIsOvercurrent(false);
         return;
       }
     } catch (e) {
@@ -359,6 +371,7 @@ export function useBluetooth() {
     connectedDevice,
     batteryVoltage,
     actualRpm,
+    isOvercurrent,
     errorMsg,
     requestEnable,
     startScan,
